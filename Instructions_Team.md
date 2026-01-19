@@ -1,5 +1,5 @@
 # Remote-Administration-Tool-RAT--SchoolProject-
-This is an educational purpose only.
+This is for an educational purpose only.
 
 
 Алекс - Защо проектът е безопасен? Какви са неговите цели? (Security and permissions)
