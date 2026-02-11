@@ -1,86 +1,113 @@
-import secrets
+from fastapi import FastAPI, HTTPException, Request
+from passlib.context import CryptContext
 from datetime import datetime, timedelta
+from jose import jwt
+import secrets
+import time
 
+# ======================
+# CONFIG
+# ======================
+SECRET_KEY = "CHANGE_ME_IN_PROD"
+ALGORITHM = "HS256"
+
+ACCESS_TOKEN_MINUTES = 30
 OTP_VALID_MINUTES = 5
-SESSION_VALID_MINUTES = 30
+MAX_ATTEMPTS = 5
+BLOCK_TIME_SECONDS = 300  # 5 min
 
-USER_DB = {
-    "admin": "password123"
+# ======================
+# APP
+# ======================
+app = FastAPI()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ======================
+# MOCK DATABASES
+# ======================
+users_db = {
+    "admin": {
+        "password_hash": pwd_context.hash("password123")
+    }
 }
 
-otp_storage = {
-    "code": None,
-    "expires_at": None,
-    "used": False
-}
+otp_db = {}
+rate_limit_db = {}
 
-session_storage = {
-    "session_id": None,
-    "expires_at": None
-}
+# ======================
+# UTILS
+# ======================
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
 
-def login(username, password):
-    return USER_DB.get(username) == password
+def create_token(username):
+    payload = {
+        "sub": username,
+        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_MINUTES)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-def generate_otp():
-    code = secrets.randbelow(900000) + 100000
-    expires_at = datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES)
-    otp_storage["code"] = code
-    otp_storage["expires_at"] = expires_at
-    otp_storage["used"] = False
-    return code, expires_at
+def rate_limit(identifier: str):
+    now = time.time()
+    data = rate_limit_db.get(identifier, {"count": 0, "blocked_until": 0})
 
-def verify_otp(input_code):
-    if otp_storage["used"]:
-        return False
-    if datetime.utcnow() > otp_storage["expires_at"]:
-        return False
-    if input_code != otp_storage["code"]:
-        return False
-    otp_storage["used"] = True
-    return True
+    if now < data["blocked_until"]:
+        raise HTTPException(status_code=429, detail="Too many attempts. Try later.")
 
-def create_session():
-    session_id = secrets.token_hex(32)
-    expires_at = datetime.utcnow() + timedelta(minutes=SESSION_VALID_MINUTES)
-    session_storage["session_id"] = session_id
-    session_storage["expires_at"] = expires_at
-    return session_id, expires_at
+    data["count"] += 1
 
-def validate_session(session_id):
-    if session_storage["session_id"] != session_id:
-        return False
-    if datetime.utcnow() > session_storage["expires_at"]:
-        return False
-    return True
+    if data["count"] >= MAX_ATTEMPTS:
+        data["blocked_until"] = now + BLOCK_TIME_SECONDS
+        data["count"] = 0
 
-if __name__ == "__main__":
-    print("AUTH SYSTEM")
+    rate_limit_db[identifier] = data
 
-    username = input("Username: ")
-    password = input("Password: ")
+# ======================
+# ROUTES
+# ======================
+@app.post("/login")
+def login(username: str, password: str, request: Request):
+    rate_limit(request.client.host)
 
-    if not login(username, password):
-        print("Invalid login")
-        exit()
+    user = users_db.get(username)
+    if not user or not verify_password(password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    otp, _ = generate_otp()
-    print(otp)
+    otp = secrets.randbelow(900000) + 100000
+    otp_db[username] = {
+        "code": otp,
+        "expires": datetime.utcnow() + timedelta(minutes=OTP_VALID_MINUTES),
+        "used": False
+    }
 
+    # В реалност: SMS / Email
+    return {"otp": otp}
+
+@app.post("/verify-otp")
+def verify_otp(username: str, otp: int):
+    record = otp_db.get(username)
+
+    if not record:
+        raise HTTPException(status_code=400, detail="OTP not found")
+
+    if record["used"]:
+        raise HTTPException(status_code=400, detail="OTP already used")
+
+    if datetime.utcnow() > record["expires"]:
+        raise HTTPException(status_code=400, detail="OTP expired")
+
+    if otp != record["code"]:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    record["used"] = True
+
+    token = create_token(username)
+    return {"access_token": token, "token_type": "bearer"}
+
+@app.get("/protected")
+def protected(token: str):
     try:
-        user_otp = int(input("OTP: "))
-    except ValueError:
-        print("Invalid OTP")
-        exit()
-
-    if not verify_otp(user_otp):
-        print("OTP failed")
-        exit()
-
-    session_id, _ = create_session()
-    print(session_id)
-
-    if validate_session(session_id):
-        print("Session valid")
-    else:
-        print("Session invalid")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return {"message": f"Hello {payload['sub']}"}
+    except:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
