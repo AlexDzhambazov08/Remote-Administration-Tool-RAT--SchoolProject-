@@ -111,3 +111,12 @@ def protected(token: str):
         return {"message": f"Hello {payload['sub']}"}
     except:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+if __name__ == "__main__":
+    # convenience runner for development. Run with: python OTP.py
+    try:
+        import uvicorn
+    except Exception:
+        raise RuntimeError("uvicorn is required to run the app. Install with: pip install uvicorn[standard]")
+    uvicorn.run(app, host="127.0.0.1", port=8000)
