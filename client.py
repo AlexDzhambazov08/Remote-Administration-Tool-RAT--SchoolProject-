@@ -13,4 +13,26 @@ client_socket.sendall(message.encode())
 response = client_socket.recv(1024).decode()
 print("Server response:", response)
 
+# Enter command loop
+if response == "ACCEPT":
+    try:
+        while True:
+            cmd = input("Enter command (or /exit to quit): ").strip()
+            
+            if not cmd:
+                continue
+            client_socket.sendall(cmd.encode())
+            
+            if cmd == "/exit":
+                break
+            # Wait for server reply
+            reply = client_socket.recv(1024).decode()
+            print("Server reply:", reply)
+    
+    except (ConnectionResetError, BrokenPipeError):
+        print("Connection closed by server.")
+
+else:
+    print("Authentication failed, closing client.")
+
 client_socket.close()

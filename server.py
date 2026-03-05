@@ -22,6 +22,27 @@ print("RAW DATA:", repr(data))
 if data == f"CONNECT {ONE_TIME_CODE}":
     conn.sendall("ACCEPT".encode())
     print("Connection accepted")
+    # Checking commands
+    while True:
+        try:
+            command = conn.recv(1024).decode().strip()
+            
+            if not command:
+                # Client side closed connection
+                print("No data received, closing loop.")
+                break
+            print("Received command:", command)
+            
+            if command == "/exit":
+                print("Exit command received. Closing connection.")
+                conn.sendall("BYE".encode())
+                break
+            # Echo or process command
+            conn.sendall(f"Executed: {command}".encode())
+        
+        except Exception as e:
+            print("Connection error:", e)
+            break
 else:
     conn.sendall("REJECT".encode())
     print("Connection rejected")
