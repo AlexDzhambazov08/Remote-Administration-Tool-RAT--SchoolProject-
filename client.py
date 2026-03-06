@@ -17,14 +17,15 @@ print("Server response:", response)
 if response == "ACCEPT":
     try:
         while True:
-            cmd = input("Enter command (or /exit to quit): ").strip()
+            cmd = input("Enter command (use '/exit' or 'exit' to quit): ").strip()
             
             if not cmd:
                 continue
             client_socket.sendall(cmd.encode())
             
-            if cmd == "/exit":
-                break
+            if cmd == "/exit" or cmd == "exit":
+                client_socket.shutdown(socket.SHUT_RDWR)
+                
             # Wait for server reply
             reply = client_socket.recv(1024).decode()
             print("Server reply:", reply)
