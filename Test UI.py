@@ -52,8 +52,9 @@ def handle_backspace(event):
 
 def handle_enter(event):
     command = terminal.get(prompt_index, "end-1c").strip()
-    terminal.insert("end", "\n")
-    write(f"[input received] {command}")
+    if command:
+        print(command)
+    write()
     return "break"
 
 terminal.bind("<Key>", prevent_edit)
@@ -68,6 +69,7 @@ def generate_code():
         random.choices(string.ascii_uppercase + string.digits, k=6)
     )
     write(f"[+] One-time code generated: {one_time_code}")
+    write("[!] Be careful! who you give access!")
 
 def connect():
     global one_time_code
