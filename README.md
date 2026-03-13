@@ -1,7 +1,3 @@
-# Remote-Administration-Tool-RAT--SchoolProject-
-This is for an educational purpose only.
+# OTP
 
-* Алекс - Защо проектът е безопасен? Какви са неговите цели? (Security and permissions)
-* Кристиан - Връзка на живо между две машини (Тестинг)
-* Йоан - Как се генерира и изтича кода (оne time code and session login)
-* Виктор - Интерфейс + презентация
+Тук се намира нашата система за One Time Password Code!
