@@ -1,14 +1,27 @@
 import customtkinter as ctk
 import random
 import string
+import subprocess
+import threading
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
 app = ctk.CTk()
+client_process = None
+server_process = None
 app.geometry("900x520")
 app.title("Remote Admin Tool")
 app.resizable(False, False)
+
+def on_closing():
+    if client_process and client_process.poll() is None:
+        client_process.terminate()
+    if server_process and server_process.poll() is None:
+        server_process.terminate()
+    app.destroy()
+
+app.protocol("WM_DELETE_WINDOW", on_closing)
 
 # SIDEBAR
 sidebar = ctk.CTkFrame(app, width=180, corner_radius=0)
@@ -42,6 +55,42 @@ def write(text=""):
     terminal.see("end")
     prompt_index = terminal.index("end-1c")
 
+
+def write_raw(text=""):
+    """Write text to the terminal without adding an extra prompt."""
+    terminal.insert("end", text + "\n")
+    terminal.see("end")
+
+
+def _read_client_output(proc):
+    """Read client stdout and append it to the UI terminal."""
+    # Remove client-side prompts so the UI terminal only shows command output.
+    prompt_parts = [
+        "Enter server IP:",
+        "Enter one-time code:",
+        "Enter command (use '/exit' or 'exit' to quit):",
+    ]
+
+    try:
+        for line in proc.stdout:
+            if not line:
+                break
+            cleaned = line.rstrip("\n")
+
+            # Ignore the initial 'Server response: ACCEPT' line that client prints on connect.
+            if cleaned.strip() == "Server response: ACCEPT":
+                continue
+
+            for part in prompt_parts:
+                cleaned = cleaned.replace(part, "")
+            cleaned = cleaned.strip()
+            if not cleaned:
+                continue
+            app.after(0, lambda l=cleaned: write_raw(l))
+    except Exception:
+        pass
+
+
 def prevent_edit(event):
     if terminal.compare("insert", "<", prompt_index):
         return "break"
@@ -51,9 +100,29 @@ def handle_backspace(event):
         return "break"
 
 def handle_enter(event):
+    global client_process
+
     command = terminal.get(prompt_index, "end-1c").strip()
-    if command:
-        print(command)
+    if not command:
+        return "break"
+
+    if client_process and client_process.poll() is None:
+        try:
+            client_process.stdin.write(command + "\n")
+            client_process.stdin.flush()
+
+            if command in ("/exit", "exit"):
+                # Let client close gracefully.
+                client_process = None
+                status.configure(text="Status: Disconnected")
+                write("[-] Disconnected from server")
+        except Exception as e:
+            write(f"[!] Error sending command: {e}")
+            client_process = None
+            status.configure(text="Status: Disconnected")
+    else:
+        write("[!] Not connected. Click Connect to establish a connection.")
+
     write()
     return "break"
 
@@ -64,35 +133,76 @@ terminal.bind("<Button-1>", lambda e: terminal.mark_set("insert", "end"))
 
 # CODE LOGIC
 def generate_code():
-    global one_time_code
-    one_time_code = "".join(
-        random.choices(string.ascii_uppercase + string.digits, k=6)
-    )
+    global one_time_code, server_process
+    # Server expects a hardcoded one-time code (see server.py)
+    one_time_code = "123456"
     write(f"[+] One-time code generated: {one_time_code}")
-    write("[!] Be careful! who you give access!")
+    write("[!] Be careful who you give access!")
+
+    if server_process is None or server_process.poll() is not None:
+        server_process = subprocess.Popen(['python', 'server.py'])
+        write("[+] Server started")
+    else:
+        write("[!] Server is already running")
+        
 
 def connect():
-    global one_time_code
+    global one_time_code, client_process
 
-    if not one_time_code:
-        write("[!] No active code. Generate one first.")
+    ip_dialog = ctk.CTkInputDialog(title="Connect", text="Enter server IP:")
+    server_ip = ip_dialog.get_input()
+    if not server_ip:
+        write("[!] Server IP not provided")
         return
 
-    dialog = ctk.CTkInputDialog(
-        title="Connect",
-        text="Enter one-time code:"
-    )
-    entered = dialog.get_input()
+    code_dialog = ctk.CTkInputDialog(title="Connect", text="Enter one-time code:")
+    entered = code_dialog.get_input()
 
     if entered != one_time_code:
         write("[!] Invalid code")
         return
 
-    status.configure(text="Status: Connected")
-    write("[+] Connection successful")
-    one_time_code = None  # invalidate code
+    # Reset the terminal so it behaves like a command console
+    terminal.delete("1.0", "end")
+    write("[+] Connecting...")
+
+    # Launch client as a subprocess and pipe its stdin/stdout
+    if client_process is None or client_process.poll() is not None:
+        client_process = subprocess.Popen(
+            ['python', 'client.py'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        # Provide prompts expected by client.py
+        client_process.stdin.write(server_ip + "\n")
+        client_process.stdin.write(entered + "\n")
+        client_process.stdin.flush()
+
+        threading.Thread(target=_read_client_output, args=(client_process,), daemon=True).start()
+
+        status.configure(text="Status: Connected")
+        # NOTE: To make onetime code non reusable add this line:
+        # one_time_code = None
+        write("[+] Connected. Enter commands below.")
+    else:
+        write("[!] Client already running")
+
 
 def disconnect():
+    global client_process
+
+    if client_process and client_process.poll() is None:
+        try:
+            client_process.stdin.write("/exit\n")
+            client_process.stdin.flush()
+        except Exception:
+            pass
+        client_process = None
+
     status.configure(text="Status: Disconnected")
     write("[-] Client disconnected")
 
@@ -109,7 +219,7 @@ ctk.CTkButton(sidebar, text="Disconnect", command=disconnect).pack(
     pady=8, padx=20, fill="x"
 )
 
-ctk.CTkButton(sidebar, text="Exit", command=app.destroy).pack(
+ctk.CTkButton(sidebar, text="Exit", command=on_closing).pack(
     pady=8, padx=20, fill="x"
 )
 
