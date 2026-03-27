@@ -48,27 +48,36 @@ prompt_index = "1.0"
 one_time_code = None
 
 # TERMINAL CONTROL
-def write(text=""):
+def write_output(text=""):
     global prompt_index
+    terminal.delete(prompt_index, "end")
     terminal.insert("end", text + "\n")
     terminal.insert("end", PROMPT)
     terminal.see("end")
     prompt_index = terminal.index("end-1c")
 
-
-def write_raw(text=""):
-    """Write text to the terminal without adding an extra prompt."""
-    terminal.insert("end", text + "\n")
+def show_prompt():
+    global prompt_index
+    if terminal.get("end-3c", "end-1c") == PROMPT:  # remove duplicate prompt
+        terminal.delete("end-3c", "end-1c")
+    terminal.insert("end", PROMPT)
     terminal.see("end")
+    prompt_index = terminal.index("end-1c")
+
+def write(text=""):
+    write_output(text)
+    show_prompt()
+
 
 
 def _read_client_output(proc):
-    """Read client stdout and append it to the UI terminal."""
-    # Remove client-side prompts so the UI terminal only shows command output.
     prompt_parts = [
         "Enter server IP:",
         "Enter one-time code:",
         "Enter command (use '/exit' or 'exit' to quit):",
+        "Server response: ACCEPT",
+        "Server response: REJECT",
+        "Server reply:",
     ]
 
     try:
@@ -77,16 +86,14 @@ def _read_client_output(proc):
                 break
             cleaned = line.rstrip("\n")
 
-            # Ignore the initial 'Server response: ACCEPT' line that client prints on connect.
-            if cleaned.strip() == "Server response: ACCEPT":
-                continue
-
             for part in prompt_parts:
                 cleaned = cleaned.replace(part, "")
+
             cleaned = cleaned.strip()
             if not cleaned:
                 continue
-            app.after(0, lambda l=cleaned: write_raw(l))
+
+            app.after(0, lambda l=cleaned: write_output(l))
     except Exception:
         pass
 
@@ -106,25 +113,30 @@ def handle_enter(event):
     if not command:
         return "break"
 
+    terminal.insert("end", "\n")
+
     if client_process and client_process.poll() is None:
         try:
             client_process.stdin.write(command + "\n")
             client_process.stdin.flush()
 
             if command in ("/exit", "exit"):
-                # Let client close gracefully.
                 client_process = None
                 status.configure(text="Status: Disconnected")
                 write("[-] Disconnected from server")
+                return "break"
         except Exception as e:
             write(f"[!] Error sending command: {e}")
             client_process = None
             status.configure(text="Status: Disconnected")
+            return "break"
     else:
         write("[!] Not connected. Click Connect to establish a connection.")
+        return "break"
 
-    write()
+    show_prompt()
     return "break"
+
 
 terminal.bind("<Key>", prevent_edit)
 terminal.bind("<BackSpace>", handle_backspace)
@@ -158,9 +170,6 @@ def connect():
     code_dialog = ctk.CTkInputDialog(title="Connect", text="Enter one-time code:")
     entered = code_dialog.get_input()
 
-    if entered != one_time_code:
-        write("[!] Invalid code")
-        return
 
     # Reset the terminal so it behaves like a command console
     terminal.delete("1.0", "end")
@@ -169,7 +178,7 @@ def connect():
     # Launch client as a subprocess and pipe its stdin/stdout
     if client_process is None or client_process.poll() is not None:
         client_process = subprocess.Popen(
-            ['python', 'client.py'],
+            ['python', '-u', 'client.py'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -225,6 +234,6 @@ ctk.CTkButton(sidebar, text="Exit", command=on_closing).pack(
 
 # INIT
 write("Application started.")
-write("Generate a one-time code to begin.")
+write("Generate a one-time code to start your server.")
 
 app.mainloop()
