@@ -3,81 +3,34 @@ import random
 import string
 import subprocess
 import threading
-import time
+
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
 # ── Palette ──────────────────────────────────────────────────────────────────
-BG = "#141414"
-SIDEBAR = "#1c1c1c"
-CARD = "#191919"
-BORDER = "#2e2e2e"
-ACCENT = "#c47c3a"
-ACCENT_HV = "#a3622c"
-DANGER = "#a84040"
+BG        = "#141414"   # pure dark neutral
+SIDEBAR   = "#1c1c1c"   # slightly lighter neutral sidebar
+CARD      = "#191919"   # dark card bg
+BORDER    = "#2e2e2e"   # subtle grey border
+ACCENT    = "#c47c3a"   # muted orange — buttons only
+ACCENT_HV = "#a3622c"   # deeper orange hover — buttons only
+DANGER    = "#a84040"   # muted red for disconnect/exit
 DANGER_HV = "#8c3333"
-MUTED = "#6b6b6b"
-FG = "#dcdcdc"
-GREEN = "#4a9e6b"
-RED = "#b85c5c"
-FONT_UI = ("Segoe UI", 13)
-FONT_MONO = ("Cascadia Code", 12)
+MUTED     = "#6b6b6b"   # neutral grey muted text
+FG        = "#dcdcdc"   # clean light grey text
+GREEN     = "#4a9e6b"   # muted green status
+RED       = "#b85c5c"   # muted red status
+FONT_UI   = ("Segoe UI", 13)
+FONT_MONO = ("Cascadia Code", 12) if True else ("Consolas", 12)
 
 app = ctk.CTk()
-app.attributes("-alpha", 0.0)
 app.configure(fg_color=BG)
 client_process = None
 server_process = None
 app.geometry("960x560")
 app.title("Remote Admin Tool")
 app.resizable(False, False)
-
-
-# ── ANIMATIONS ───────────────────────────────────────────────────────────────
-
-def fade_in_window():
-    alpha = app.attributes("-alpha")
-    if alpha < 1.0:
-        alpha += 0.05
-        app.attributes("-alpha", alpha)
-        app.after(15, fade_in_window)
-
-
-def animate_status_dot():
-    if status.cget("text") == "Disconnected":
-        current_color = status_dot.cget("text_color")
-        # Алекс: По-плавно преливане на цветовете за "дишащ" ефект
-        next_color = "#3d2b2b" if current_color == RED else RED
-        status_dot.configure(text_color=next_color)
-    app.after(1000, animate_status_dot)
-
-
-def typewriter_text(text, index=0):  # Алекс: Анимация тип "пишеща машина" за терминала
-    if index < len(text):
-        terminal.insert("end", text[index])
-        terminal.see("end")
-        app.after(30, lambda: typewriter_text(text, index + 1))
-    else:
-        terminal.insert("end", "\n" + PROMPT)
-        global prompt_index
-        prompt_index = terminal.index("end-1c")
-
-
-# ── COMPONENTS ───────────────────────────────────────────────────────────────
-
-class ModernButton(ctk.CTkButton):  # Алекс: Подобрен бутон с динамична промяна на височината
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.original_height = kwargs.get("height", 38)
-        self.bind("<Enter>", self.on_enter)
-        self.bind("<Leave>", self.on_leave)
-
-    def on_enter(self, event):
-        self.configure(height=self.original_height + 4, border_width=1, border_color=FG)
-
-    def on_leave(self, event):
-        self.configure(height=self.original_height, border_width=0)
 
 
 def on_closing():
@@ -90,70 +43,72 @@ def on_closing():
 
 app.protocol("WM_DELETE_WINDOW", on_closing)
 
+
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
-sidebar = ctk.CTkFrame(app, width=220, corner_radius=0, fg_color=SIDEBAR)
+sidebar = ctk.CTkFrame(app, width=200, corner_radius=0, fg_color=SIDEBAR)
 sidebar.pack(side="left", fill="y")
 sidebar.pack_propagate(False)
 
-title_label = ctk.CTkLabel(
+ctk.CTkLabel(
     sidebar,
     text="RAT Panel",
-    font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+    font=ctk.CTkFont(family="Segoe UI", size=17, weight="bold"),
     text_color=FG,
-)
-title_label.pack(pady=(30, 4), padx=20)
+).pack(pady=(28, 4), padx=20)
 
 ctk.CTkLabel(
     sidebar,
-    text="SYSTEM SECURE ACCESS",  # Алекс: По-модерно звучене
-    font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
-    text_color=ACCENT,
+    text="Remote Admin Tool",
+    font=ctk.CTkFont(family="Segoe UI", size=10),
+    text_color=MUTED,
 ).pack(pady=(0, 24), padx=20)
 
-# Алекс: Разделител с лека прозрачност
-ctk.CTkFrame(sidebar, height=2, fg_color=BORDER).pack(fill="x", padx=25, pady=(0, 20))
+# Divider
+ctk.CTkFrame(sidebar, height=1, fg_color=BORDER).pack(fill="x", padx=16, pady=(0, 20))
 
 
 def sidebar_btn(text, cmd, color=ACCENT, hover=ACCENT_HV):
-    return ModernButton(
+    return ctk.CTkButton(
         sidebar,
         text=text,
         command=cmd,
         fg_color=color,
         hover_color=hover,
         text_color=FG,
-        font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-        corner_radius=10,
+        font=ctk.CTkFont(family="Segoe UI", size=13),
+        corner_radius=8,
         height=38,
     )
 
 
 # ── MAIN AREA ─────────────────────────────────────────────────────────────────
 main = ctk.CTkFrame(app, fg_color=BG)
-main.pack(side="right", expand=True, fill="both", padx=20, pady=20)
+main.pack(side="right", expand=True, fill="both", padx=16, pady=16)
 
+# Status bar row
 status_row = ctk.CTkFrame(main, fg_color="transparent")
-status_row.pack(fill="x", pady=(0, 15))
+status_row.pack(fill="x", pady=(0, 10))
 
-status_dot = ctk.CTkLabel(status_row, text="●", font=ctk.CTkFont(size=16), text_color=RED)
-status_dot.pack(side="left", padx=(5, 8))
+status_dot = ctk.CTkLabel(status_row, text="●", font=ctk.CTkFont(size=12), text_color=RED)
+status_dot.pack(side="left", padx=(0, 6))
 
 status = ctk.CTkLabel(
     status_row,
     text="Disconnected",
-    font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+    font=ctk.CTkFont(family="Segoe UI", size=12),
     text_color=MUTED,
 )
 status.pack(side="left")
 
+# Terminal
 terminal = ctk.CTkTextbox(
     main,
     font=ctk.CTkFont(family="Cascadia Code", size=12),
     fg_color=CARD,
     text_color=FG,
     border_color=BORDER,
-    border_width=2,  # Алекс: Малко по-дебела рамка за по-голям контраст
-    corner_radius=15,
+    border_width=1,
+    corner_radius=10,
     scrollbar_button_color=BORDER,
     scrollbar_button_hover_color=ACCENT,
 )
@@ -161,44 +116,103 @@ terminal.pack(expand=True, fill="both")
 
 PROMPT = "› "
 prompt_index = "1.0"
+one_time_code = None
 
 
-# ── TERMINAL LOGIC ────────────────────────────────────────────────────────────
-
+# ── TERMINAL CONTROL ──────────────────────────────────────────────────────────
 def write_output(text=""):
     global prompt_index
+    terminal.delete(prompt_index, "end")
     terminal.insert("end", text + "\n")
     terminal.insert("end", PROMPT)
     terminal.see("end")
     prompt_index = terminal.index("end-1c")
 
 
+def show_prompt():
+    global prompt_index
+    if terminal.get("end-3c", "end-1c") == PROMPT:
+        terminal.delete("end-3c", "end-1c")
+    terminal.insert("end", PROMPT)
+    terminal.see("end")
+    prompt_index = terminal.index("end-1c")
+
+
+def write(text=""):
+    write_output(text)
+    show_prompt()
+
+
+def _read_client_output(proc):
+    prompt_parts = [
+        "Enter server IP:",
+        "Enter one-time code:",
+        "Enter command (use '/exit' or 'exit' to quit):",
+        "Server response: ACCEPT",
+        "Server response: REJECT",
+        "Server reply:",
+    ]
+    try:
+        for line in proc.stdout:
+            if not line:
+                break
+            cleaned = line.rstrip("\n")
+            for part in prompt_parts:
+                cleaned = cleaned.replace(part, "")
+            cleaned = cleaned.strip()
+            if not cleaned:
+                continue
+            app.after(0, lambda l=cleaned: write_output(l))
+    except Exception:
+        pass
+
+
+def prevent_edit(event):
+    if terminal.compare("insert", "<", prompt_index):
+        return "break"
+
+
+def handle_backspace(event):
+    if terminal.compare("insert", "<=", prompt_index):
+        return "break"
+
+
 def handle_enter(event):
     global client_process
     command = terminal.get(prompt_index, "end-1c").strip()
-    if not command: return "break"
+    if not command:
+        return "break"
     terminal.insert("end", "\n")
-
     if client_process and client_process.poll() is None:
-        client_process.stdin.write(command + "\n")
-        client_process.stdin.flush()
-        if command in ("/exit", "exit"):
+        try:
+            client_process.stdin.write(command + "\n")
+            client_process.stdin.flush()
+            if command in ("/exit", "exit"):
+                client_process = None
+                set_status_disconnected()
+                write("[-] Disconnected from server")
+                return "break"
+        except Exception as e:
+            write(f"[!] Error sending command: {e}")
             client_process = None
             set_status_disconnected()
-            write_output("[-] Session ended.")
+            return "break"
     else:
-        write_output("[!] System offline. Please connect first.")
-
-    terminal.see("end")
+        write("[!] Not connected. Click Connect to establish a connection.")
+        return "break"
+    show_prompt()
     return "break"
 
 
+terminal.bind("<Key>", prevent_edit)
+terminal.bind("<BackSpace>", handle_backspace)
 terminal.bind("<Return>", handle_enter)
+terminal.bind("<Button-1>", lambda e: terminal.mark_set("insert", "end"))
 
 
 def set_status_connected():
     status_dot.configure(text_color=GREEN)
-    status.configure(text="System Online", text_color=GREEN)  # Алекс: Промяна на текста за по-професионално излъчване
+    status.configure(text="Connected", text_color=GREEN)
 
 
 def set_status_disconnected():
@@ -206,36 +220,74 @@ def set_status_disconnected():
     status.configure(text="Disconnected", text_color=MUTED)
 
 
-# ── ACTIONS ───────────────────────────────────────────────────────────────────
-
+# ── CODE LOGIC ────────────────────────────────────────────────────────────────
 def generate_code():
-    code = "".join(random.choices(string.digits, k=6))
-    write_output(f"[+] Security Code Generated: {code}")
+    global one_time_code, server_process
+    one_time_code = "123456"
+    write(f"[+] One-time code generated: {one_time_code}")
+    write("[!] Be careful who you give access!")
+    if server_process is None or server_process.poll() is not None:
+        server_process = subprocess.Popen(['python', 'server.py'])
+        write("[+] Server started")
+    else:
+        write("[!] Server is already running")
 
 
 def connect():
-    set_status_connected()
-    write_output("[+] Establishing encrypted tunnel...")
+    global one_time_code, client_process
+    ip_dialog = ctk.CTkInputDialog(title="Connect", text="Enter server IP:")
+    server_ip = ip_dialog.get_input()
+    if not server_ip:
+        write("[!] Server IP not provided")
+        return
+    code_dialog = ctk.CTkInputDialog(title="Connect", text="Enter one-time code:")
+    entered = code_dialog.get_input()
+    terminal.delete("1.0", "end")
+    write("[+] Connecting...")
+    if client_process is None or client_process.poll() is not None:
+        client_process = subprocess.Popen(
+            ['python', '-u', 'client.py'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        client_process.stdin.write(server_ip + "\n")
+        client_process.stdin.write(entered + "\n")
+        client_process.stdin.flush()
+        threading.Thread(target=_read_client_output, args=(client_process,), daemon=True).start()
+        set_status_connected()
+        write("[+] Connected. Enter commands below.")
+    else:
+        write("[!] Client already running")
 
 
 def disconnect():
+    global client_process
+    if client_process and client_process.poll() is None:
+        try:
+            client_process.stdin.write("/exit\n")
+            client_process.stdin.flush()
+        except Exception:
+            pass
+        client_process = None
     set_status_disconnected()
-    write_output("[-] Connection terminated by user.")
+    write("[-] Client disconnected")
 
 
 # ── SIDEBAR BUTTONS ───────────────────────────────────────────────────────────
-sidebar_btn("Generate Code", generate_code).pack(pady=8, padx=20, fill="x")
-sidebar_btn("Connect", connect).pack(pady=8, padx=20, fill="x")
-sidebar_btn("Disconnect", disconnect, color=DANGER, hover=DANGER_HV).pack(pady=8, padx=20, fill="x")
+sidebar_btn("Generate Code", generate_code).pack(pady=6, padx=20, fill="x")
+sidebar_btn("Connect", connect).pack(pady=6, padx=20, fill="x")
+sidebar_btn("Disconnect", disconnect, color=DANGER, hover=DANGER_HV).pack(pady=6, padx=20, fill="x")
 
-ctk.CTkFrame(sidebar, height=1, fg_color=BORDER).pack(fill="x", padx=25, pady=(15, 15))
-sidebar_btn("Exit System", on_closing, color=DANGER, hover=DANGER_HV).pack(pady=8, padx=20, fill="x")
+ctk.CTkFrame(sidebar, height=1, fg_color=BORDER).pack(fill="x", padx=16, pady=(14, 14))
+
+sidebar_btn("Exit", on_closing, color=DANGER, hover=DANGER_HV).pack(pady=6, padx=20, fill="x")
+
 
 # ── INIT ──────────────────────────────────────────────────────────────────────
-fade_in_window()
-animate_status_dot()
-
-# Алекс: Стартираме терминала с пишеща машина за готин ефект
-typewriter_text("Initializing remote administration protocols...")
+write("Application started.")
+write("Generate a one-time code to start your server.")
 
 app.mainloop()
