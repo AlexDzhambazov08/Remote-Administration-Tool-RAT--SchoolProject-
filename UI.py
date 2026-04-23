@@ -1,9 +1,19 @@
-import customtkinter as ctk
 import random
 import string
 import subprocess
 import threading
+import sys
+import os
 
+if len(sys.argv) > 1:
+    if sys.argv[1] == "--server":
+        import server
+        sys.exit()
+    elif sys.argv[1] == "--client":
+        import client
+        sys.exit()
+
+import customtkinter as ctk
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -32,6 +42,11 @@ app.geometry("960x560")
 app.title("Remote Admin Tool")
 app.resizable(False, False)
 
+def get_target_cmd(target_name):
+    if getattr(sys, 'frozen', False):
+        return [sys.executable, f"--{target_name}"]
+    else:
+        return [sys.executable, "-u", f"{target_name}.py"]
 
 def on_closing():
     if client_process and client_process.poll() is None:
@@ -227,7 +242,7 @@ def generate_code():
     write(f"[+] One-time code generated: {one_time_code}")
     write("[!] Be careful who you give access!")
     if server_process is None or server_process.poll() is not None:
-        server_process = subprocess.Popen(['python', 'server.py'])
+        server_process = subprocess.Popen(get_target_cmd("server"))
         write("[+] Server started")
     else:
         write("[!] Server is already running")
@@ -246,7 +261,7 @@ def connect():
     write("[+] Connecting...")
     if client_process is None or client_process.poll() is not None:
         client_process = subprocess.Popen(
-            ['python', '-u', 'client.py'],
+            get_target_cmd("client"),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
