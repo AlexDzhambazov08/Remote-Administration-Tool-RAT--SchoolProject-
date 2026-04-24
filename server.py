@@ -14,7 +14,6 @@ ONE_TIME_CODE = "123456"  # за демонстрация
 
 # Custom commands here - format: command: response (save before running file)
 COMMANDS = {
-    "/exit" : "Exit the server.",
     "/help": "Display all commands.",
     "/67": "Six seveeeeeeen!",
     "/stop": "Stopping the server..."
@@ -89,7 +88,7 @@ if auth_data == f"CONNECT {ONE_TIME_CODE}":
             # Handle Custom Text Commands (Starting with '/')
             if raw_data.startswith("/"):
                 print(f"Terminal Command: {raw_data}")
-                if raw_data in ("/stop", "/exit"):
+                if raw_data in ("/stop"):
                     cmd_conn.sendall("Server is stopping...".encode())
                     server_running = False
                 elif raw_data == "/help":
