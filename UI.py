@@ -251,12 +251,28 @@ def generate_code():
 
 def connect():
     global one_time_code, client_process
-    ip_dialog = ctk.CTkInputDialog(title="Connect", text="Enter server IP:")
+    ip_dialog = ctk.CTkInputDialog(
+        title="Connect",
+        text="Enter server IP:",
+        fg_color=CARD,
+        button_fg_color=ACCENT,
+        button_hover_color=ACCENT_HV,
+        button_text_color=FG
+    )
+    ip_dialog._text_label.configure(text_color=FG)
     server_ip = ip_dialog.get_input()
     if not server_ip:
         write("[!] Server IP not provided")
         return
-    code_dialog = ctk.CTkInputDialog(title="Connect", text="Enter one-time code:")
+    code_dialog = ctk.CTkInputDialog(
+        title="Connect",
+        text="Enter one-time code:",
+        fg_color=CARD,
+        button_fg_color=ACCENT,
+        button_hover_color=ACCENT_HV,
+        button_text_color=FG
+    )
+    code_dialog._text_label.configure(text_color=FG)
     entered = code_dialog.get_input()
     terminal.delete("1.0", "end")
     write("[+] Connecting...")
@@ -319,9 +335,9 @@ app.attributes("-alpha", 0.0)
 def fade_in():
     alpha = app.attributes("-alpha")
     if alpha < 1.0:
-        alpha += 0.05
+        alpha += 0.03
         app.attributes("-alpha", alpha)
-        app.after(20, fade_in)
+        app.after(30, fade_in)
 
 
 # 2. Sidebar Entrance Slide
