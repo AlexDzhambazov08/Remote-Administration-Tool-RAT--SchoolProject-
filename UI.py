@@ -3,7 +3,8 @@ import string
 import subprocess
 import threading
 import sys
-import os
+import tkinter as tk  # Added for animation canvas - aleks
+import colorsys  # Added for RGB logic - aleks
 
 if len(sys.argv) > 1:
     if sys.argv[1] == "--server":
@@ -304,5 +305,102 @@ sidebar_btn("Exit", on_closing, color=DANGER, hover=DANGER_HV).pack(pady=6, padx
 # ── INIT ──────────────────────────────────────────────────────────────────────
 write("Application started.")
 write("Generate a one-time code to start your server.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Made by Aleks — ANIMATIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# 1. Smooth Window Fade-In
+# Made by Aleks
+app.attributes("-alpha", 0.0)
+
+
+def fade_in():
+    alpha = app.attributes("-alpha")
+    if alpha < 1.0:
+        alpha += 0.05
+        app.attributes("-alpha", alpha)
+        app.after(20, fade_in)
+
+
+# 2. Sidebar Entrance Slide
+# Made by Aleks
+sidebar.configure(width=0)
+
+
+def slide_sidebar():
+    cur_width = sidebar.winfo_width()
+    if cur_width < 200:
+        sidebar.configure(width=cur_width + 10)
+        app.after(10, slide_sidebar)
+
+
+# 3. Status Dot Pulsing Animation
+# Made by Aleks
+def pulse_dot(state=True):
+    current_color = status_dot.cget("text_color")
+    if current_color != MUTED:
+        new_alpha = "#555555" if state else (GREEN if status.cget("text") == "Connected" else RED)
+        status_dot.configure(text_color=new_alpha)
+    app.after(800, lambda: pulse_dot(not state))
+
+
+# 4. Terminal Border Glow on Focus
+# Made by Aleks
+def on_focus_in(event):
+    terminal.configure(border_color=ACCENT, border_width=2)
+
+
+def on_focus_out(event):
+    terminal.configure(border_color=BORDER, border_width=1)
+
+
+terminal._textbox.bind("<FocusIn>", on_focus_in)
+terminal._textbox.bind("<FocusOut>", on_focus_out)
+
+
+# 5. Button Hover Scale Effect Logic
+# Made by Aleks
+def setup_button_hovers():
+    for widget in sidebar.winfo_children():
+        if isinstance(widget, ctk.CTkButton):
+            def enter(e, btn=widget):
+                btn.configure(border_width=1, border_color=FG)
+
+            def leave(e, btn=widget):
+                btn.configure(border_width=0)
+
+            widget.bind("<Enter>", enter)
+            widget.bind("<Leave>", leave)
+
+
+# 6. RGB Terminal Outline
+# Made by Aleks
+rgb_hue = 0
+
+
+def update_rgb_border():
+    global rgb_hue
+    rgb_hue += 0.01
+    if rgb_hue > 1.0:
+        rgb_hue = 0
+    # Convert HSV to RGB for smooth cycling
+    r, g, b = [int(x * 255) for x in colorsys.hsv_to_rgb(rgb_hue, 1, 1)]
+    hex_color = f'#{r:02x}{g:02x}{b:02x}'
+
+    terminal.configure(border_color=hex_color, border_width=2)
+    app.after(50, update_rgb_border)
+
+
+# Trigger Startup Animations
+# Made by Aleks
+app.after(100, fade_in)
+app.after(150, slide_sidebar)
+app.after(500, setup_button_hovers)
+app.after(1000, pulse_dot)
+app.after(1000, update_rgb_border)  # Start RGB Outline
+
+# ══════════════════════════════════════════════════════════════════════════════
 
 app.mainloop()
