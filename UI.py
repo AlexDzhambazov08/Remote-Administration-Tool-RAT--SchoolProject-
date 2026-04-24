@@ -259,7 +259,10 @@ def connect():
         button_hover_color=ACCENT_HV,
         button_text_color=FG
     )
-    ip_dialog._text_label.configure(text_color=FG)
+    try:
+        ip_dialog._text_label.configure(text_color=FG)
+    except:
+        pass
     server_ip = ip_dialog.get_input()
     if not server_ip:
         write("[!] Server IP not provided")
@@ -272,7 +275,10 @@ def connect():
         button_hover_color=ACCENT_HV,
         button_text_color=FG
     )
-    code_dialog._text_label.configure(text_color=FG)
+    try:
+        code_dialog._text_label.configure(text_color=FG)
+    except:
+        pass
     entered = code_dialog.get_input()
     terminal.delete("1.0", "end")
     write("[+] Connecting...")
